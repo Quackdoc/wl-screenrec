@@ -129,6 +129,8 @@ impl AvHwDevCtx {
             let sts = if self.fmt == Pixel::VULKAN {
                 #[cfg(feature = "experimental-vulkan")]
                 {
+                    use std::mem;
+
                     use ash::vk;
                     use ffmpeg::ffi::{
                         AVHWDeviceContext, AVVulkanDeviceContext, AVVulkanFramesContext,
@@ -139,9 +141,9 @@ impl AvHwDevCtx {
 
                     let inst = ash::Instance::load(
                         &ash::StaticFn {
-                            get_instance_proc_addr: vk_hwctx.get_proc_addr,
+                            get_instance_proc_addr: mem::transmute(vk_hwctx.get_proc_addr.unwrap()),
                         },
-                        vk_hwctx.inst,
+                        mem::transmute(vk_hwctx.inst),
                     );
 
                     let pixfmt_vk = vkfmt_from_pixfmt(pixfmt)?;
@@ -161,7 +163,7 @@ impl AvHwDevCtx {
                         Tiling::Drm(modifiers) => {
                             let modifiers_filtered = vk_filter_drm_modifiers(
                                 inst,
-                                vk_hwctx.phys_dev,
+                                mem::transmute(vk_hwctx.phys_dev),
                                 pixfmt_vk,
                                 vk_usage,
                                 modifiers,
@@ -188,8 +190,8 @@ impl AvHwDevCtx {
 
                     let vk_ptr = &mut *(hwframe_casted.hwctx as *mut AVVulkanFramesContext);
 
-                    vk_ptr.tiling = tiling;
-                    vk_ptr.usage = vk_usage;
+                    vk_ptr.tiling = tiling.as_raw();
+                    vk_ptr.usage = vk_usage.as_raw() as i32;
                     vk_ptr.create_pnext = vk_bufs.as_mut().chain_ptr();
 
                     vk = Some(vk_bufs);
@@ -246,7 +248,7 @@ fn vkfmt_from_pixfmt(pix: Pixel) -> Result<ash::vk::Format, ffmpeg::Error> {
         if res.is_null() {
             Err(ffmpeg::Error::InvalidData)
         } else {
-            Ok(*res)
+            Ok(ash::vk::Format::from_raw(*res))
         }
     }
 }
