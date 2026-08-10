@@ -834,13 +834,11 @@ impl<S: CaptureSource + 'static> Dispatch<WlOutput, ()> for State<S> {
                 flags: WEnum::Value(flags),
                 width,
                 height,
-            } => {
-                if flags.contains(Mode::Current) {
-                    state.update_output_info_wl_output(&id, |info| {
-                        info.refresh = Some(Rational(refresh, 1000));
-                        info.size_pixels = Some((width, height));
-                    });
-                }
+            } if flags.contains(Mode::Current) => {
+                state.update_output_info_wl_output(&id, |info| {
+                    info.refresh = Some(Rational(refresh, 1000));
+                    info.size_pixels = Some((width, height));
+                });
             }
             wl_output::Event::Geometry { transform, .. } => match transform {
                 WEnum::Value(v) => {
@@ -1255,7 +1253,7 @@ impl<S: CaptureSource + 'static> State<S> {
 
         info!("output probe complete: {:?}", p.outputs);
 
-        let enabled_outputs: Vec<_> = p.outputs.iter().flat_map(|(_, o)| o).collect();
+        let enabled_outputs: Vec<_> = p.outputs.values().flatten().collect();
 
         let (output, roi) = match (self.args.geometry, self.args.output.as_str()) {
             (None, "") => {
