@@ -1693,11 +1693,15 @@ fn parse_dict<'a>(dict: &str) -> Result<dictionary::Owned<'a>, ffmpeg::Error> {
     }
 }
 
-fn get_encoder(args: &Args, format: &Output) -> anyhow::Result<ffmpeg::Codec> {
+fn get_encoder(args: &Args, format: &Output) -> anyhow::Result<ffmpeg::codec::Video> {
     Ok(if let Some(encoder_name) = &args.ffmpeg_encoder {
         ffmpeg_next::encoder::find_by_name(encoder_name).ok_or_else(|| {
             format_err!(
                 "Encoder {encoder_name} specified with --ffmpeg-encoder could not be instantiated"
+            )
+        })?.video().map_err(|_| {
+            format_err!(
+                "Encoder {encoder_name} specified with --ffmpeg-encoder is not a video encoder"
             )
         })?
     } else {
@@ -1739,11 +1743,23 @@ fn get_encoder(args: &Args, format: &Output) -> anyhow::Result<ffmpeg::Codec> {
                 }
             },
         }
+        .video()
+        .map_err(|_| {
+            format_err!(
+                "Encoder for codec {codec_id:?} is not a video encoder, this is probably a bug"
+            )
+        })?
     })
 }
 
-fn get_enc_pixfmt(args: &Args, encoder: &ffmpeg::Codec) -> anyhow::Result<EncodePixelFormat> {
-    let supported_formats = supported_formats(encoder);
+fn get_enc_pixfmt(
+    args: &Args,
+    encoder: &ffmpeg::codec::Video,
+) -> anyhow::Result<EncodePixelFormat> {
+    let supported_formats = encoder
+        .formats()
+        .map(|f| f.collect::<Vec<_>>())
+        .unwrap_or_default();
     Ok(if supported_formats.is_empty() {
         match args.encode_pixfmt {
             Some(fmt) => EncodePixelFormat::Sw(fmt),
@@ -2199,18 +2215,6 @@ impl EncState {
                 self.on_encoded_packet(packet);
             }
         }
-    }
-}
-
-fn supported_formats(codec: &ffmpeg::Codec) -> Vec<Pixel> {
-    unsafe {
-        let mut frmts = Vec::new();
-        let mut fmt_ptr = (*codec.as_ptr()).pix_fmts;
-        while !fmt_ptr.is_null() && *fmt_ptr as c_int != -1 {
-            frmts.push(Pixel::from(*fmt_ptr));
-            fmt_ptr = fmt_ptr.add(1);
-        }
-        frmts
     }
 }
 
